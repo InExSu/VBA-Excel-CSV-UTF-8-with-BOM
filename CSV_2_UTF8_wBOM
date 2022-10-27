@@ -1,0 +1,77 @@
+Attribute VB_Name = "Module1"
+Option Explicit
+
+Sub CSV_UTF8_BOM( _
+   srcRange As Range, _
+   fname As String, _
+   Optional with_ As Boolean = True)
+   
+   Dim currRow As Range
+   Dim currCell As Range
+   Dim currTextStr As String
+   Dim uTFStream As Object
+   Dim binaryStream As Object
+   Dim cellValue As String
+
+   'set field separator
+   Const listSep As String = ";"
+   
+   ' ADO Constants
+   Const adTypeBinary = 1 ' The stream contains binary data
+   Const adTypeText = 2 ' The stream contains text data (default)
+   Const adWriteLine = 1 ' write text string and a line separator (as defined by the LineSeparator property) to the stream.
+   Const adModeReadWrite = 3 ' Read/write
+   Const adLF = 10 ' Line feed only - default is carriage return line feed (adCRLF)
+   Const adSaveCreateOverWrite = 2 ' Overwrites the file with the data from the currently open Stream object, if the file already exists
+
+   ' prepare UTF-8 stream
+   Set uTFStream = CreateObject("adodb.stream")
+   uTFStream.Type = adTypeText
+   uTFStream.Mode = adModeReadWrite
+   uTFStream.Charset = "utf-8"
+   uTFStream.LineSeparator = adLF
+   uTFStream.Open
+
+   For Each currRow In srcRange.Rows
+      'enclose each value with quotation marks and escape quotation marks in values
+      currTextStr = ""
+      For Each currCell In currRow.Cells
+         If IsError(currCell.Value) Then
+            cellValue = "Error in cell(" & currCell.Row & ", " & currCell.Column & " )"
+         Else
+            cellValue = currCell.Value
+         End If
+         
+         currTextStr = currTextStr & """" & Replace$(cellValue, """", """""") & """" & listSep
+      
+      Next
+      'remove ListSep after the last value in line
+      While Right$(currTextStr, 1) = listSep
+         currTextStr = Left$(currTextStr, Len(currTextStr) - 1)
+      Wend
+      'add line to UTFStream
+      uTFStream.WriteText currTextStr, adWriteLine ' Writes character data to a text Stream object
+   Next
+
+   'copy UTFStream to BinaryStream
+   Set binaryStream = CreateObject("adodb.stream")
+   binaryStream.Type = adTypeBinary
+   binaryStream.Mode = adModeReadWrite
+   binaryStream.Open ' Opens a Stream object
+
+   'skip BOM ?
+   uTFStream.Position = 3 ' sets or returns a long value that indicates the current position (in bytes) from the beginning of a Stream object
+   If with_ Then uTFStream.Position = 0
+   
+   uTFStream.CopyTo binaryStream ' Copies a specified number of characters/bytes from one Stream object into another Stream object
+
+   uTFStream.Flush ' Sends the contents of the Stream buffer to the associated underlying object
+   uTFStream.Close ' Closes a Stream object
+
+   'save to file
+   binaryStream.SaveToFile fname, adSaveCreateOverWrite
+   binaryStream.Flush ' Sends the contents of the Stream buffer to the associated underlying object
+   binaryStream.Close ' Closes a Stream object
+
+End Sub
+
